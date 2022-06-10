@@ -4,6 +4,7 @@
   "private": true,
   "description": "A Probot app",
   "author": "andrei0x309 <andrei@flashsoft.eu>",
+  "type": "module",
   "license": "ISC",
   "homepage": "https://github.com/andrei0x309/github-discord-bot",
   "keywords": [
@@ -12,10 +13,13 @@
     "probot-app"
   ],
   "scripts": {
-    "start": "probot run ./index.js",
+    "start": "node ./entry.js",
     "test": "jest"
   },
   "dependencies": {
+    "discord.js": "^13.8.0",
+    "dotenv": "^16.0.1",
+    "express": "^4.18.1",
     "probot": "^11.0.1"
   },
   "devDependencies": {
