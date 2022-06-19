@@ -1,18 +1,16 @@
-import { notifyGithubChannel } from '../../helpers/discord'
-
-const { GITHUB_CHANNEL_ID } = process.env
+import { notifyGithubChannel } from 'discord.js'
 
 export const githubAppMain = (app) => {
   app.log.info('Github App Started !')
 
-  const allowedOrgs = ['andrei0x309', 'Yup-io']
+  const allowedOrgs = process.env.ALLLOWED_ORGANIZATIONS.split(',')
   const secretTags = ['secret', 'private']
   let allowedRepos
 
   if (process.env.NODE_ENV === 'production') {
-    allowedRepos = ['yup_docs', 'yup-monorepo', 'score-service', 'yup_extension', 'polygon-contracts', 'yup-live', 'gather-town-WS-POAP-bot', 'app-frontend']
+    allowedRepos = process.env.ALLLOWED_REPOS.split(',')
   } else {
-    allowedRepos = ['test-yup-monorepo', 'yup-monorepo']
+    allowedRepos = process.env.ALLLOWED_REPOS.split(',')
   }
 
   const hwdIssueOpened = async (context) => {
@@ -31,42 +29,43 @@ export const githubAppMain = (app) => {
       app.log.info('Ignoring merge push')
       return
     }
-    let messageRet = `A push was made to the repository "${context.payload.repository.full_name}"\n`
+    const messagePush = `\`\`\`fix\nA push was made to the repository "${context.payload.repository.full_name}"\n\`\`\``
+    let messageCommits = ''
     for (const commit of context.payload.commits) {
       const { message, id, timestamp, author } = commit
       let { added, removed, modified } = commit
       let filesMessage = ''
       if (added.length > 0) {
-        if (added.length > 10) {
-          added = added.slice(0, 10)
+        if (added.length > 6) {
+          added = added.slice(0, 6)
           added.push('...')
         }
-        filesMessage += `\nAdded files: ${added.join(', ')}`
+        filesMessage += `\n+ Added files: ${added.join(', ')}`
       }
       if (removed.length > 0) {
-        if (removed.length > 10) {
-          removed = added.slice(0, 10)
+        if (removed.length > 6) {
+          removed = removed.slice(0, 6)
           removed.push('...')
         }
-        filesMessage += `\nRemoved files: ${removed.join(', ')}`
+        filesMessage += `\n- Removed files: ${removed.join(', ')}`
       }
       if (modified.length > 0) {
-        if (modified.length > 10) {
-          modified = added.slice(0, 10)
+        if (modified.length > 6) {
+          modified = modified.slice(0, 6)
           modified.push('...')
         }
-        filesMessage += `\nModified files: ${modified.join(', ')}`
+        filesMessage += `\n+ Modified files: ${modified.join(', ')}`
       }
       if (filesMessage.length > 0) {
-        filesMessage = `${filesMessage}\n`
+        filesMessage = `\`\`\`diff\n${filesMessage}\`\`\``
       }
-      messageRet = `${messageRet}\nCommit: ${id} at ${timestamp} commit message: "${message}" by author: **${author.username}** ${filesMessage}\n`
+      messageCommits = `${messageCommits}\n\`\`\`fix\nCommit: ${id.substring(0, 7)} at ${timestamp}\nMessage: ${message} \nAuthor: ${author.username}\`\`\` ${filesMessage}\n`
     }
-    notifyGithubChannel(messageRet)
+    notifyGithubChannel(`${messagePush}\n${messageCommits}`)
   }
 
   const hwdStarCreated = async (context) => {
-    const message = `Repo "${context.payload.repository.full_name}" was stared by **${context.payload.sender.login}**`
+    const message = `\`\`\`fix\nRepo: ${context.payload.repository.full_name} was stared by ${context.payload.sender.login}\`\`\``
     notifyGithubChannel(message)
   }
 
@@ -82,10 +81,10 @@ export const githubAppMain = (app) => {
     const url = context.payload.pull_request.html_url
     const isPrivate = context?.payload?.repository?.private ?? false
     const branch = context?.payload?.pull_request?.head?.ref
-    const privateText = isPrivate ? '' : ` with url: ${url}`
-    const stats = `No of commits: ${context.payload.pull_request.commits}\n No of additions: ${context.payload.pull_request.additions}\n No of deletions: ${context.payload.pull_request.deletions}\n No of changed files: ${context.payload.pull_request.changed_files}`
-    let message = `**${user}** opened a pull request on ${repo} at ${date}`
-    message = `${message} on branch: ${branch}${privateText}. \nStats:\n ${stats}`
+    const privateText = isPrivate ? '' : `\nUrl: <${url}>`
+    const stats = `\`\`\`diff\nStats:\n\n+  No of commits: ${context.payload.pull_request.commits}\n+  No of additions: ${context.payload.pull_request.additions}\n-  No of deletions: ${context.payload.pull_request.deletions}\n+  No of changed files: ${context.payload.pull_request.changed_files}\`\`\``
+    let message = `\`\`\`fix\n${user} opened a pull request on ${repo} at ${date}`
+    message = `${message} on branch: ${branch} ${privateText}\`\`\` ${stats}`
     notifyGithubChannel(message)
   }
   const hwdPullRequestClosed = async (context) => {
@@ -99,9 +98,10 @@ export const githubAppMain = (app) => {
     const date = context.payload.pull_request.created_at
     const user = isMerged ? context.payload.pull_request.merged_by.login : context.payload.pull_request.user.login
     const branch = context?.payload?.pull_request?.head?.ref
-    const stats = `No of commits: ${context.payload.pull_request.commits}\n No of additions: ${context.payload.pull_request.additions}\n No of deletions: ${context.payload.pull_request.deletions}\n No of changed files: ${context.payload.pull_request.changed_files}`
+    const stats = `\`\`\`diff\nStats:\n\n+  No of commits: ${context.payload.pull_request.commits}\n+  No of additions: ${context.payload.pull_request.additions}\n-  No of deletions: ${context.payload.pull_request.deletions}\n+  No of changed files: ${context.payload.pull_request.changed_files}\`\`\``
     const action = isMerged ? 'merged' : 'closed'
-    const message = `**${user}** ${action} branch: **${branch}** on ${repo} at ${date}. \nChanges wil become live in a few minutes\nStats:\n ${stats}`
+    const changeWillActivate = isMerged ? '\n> Changes wil become live in a few minutes...\n' : '\n'
+    const message = `\`\`\`fix\n${user} ${action} branch: ${branch} on ${repo} at ${date}.\`\`\` ${changeWillActivate} ${stats}`
     notifyGithubChannel(message)
   }
 
@@ -111,8 +111,9 @@ export const githubAppMain = (app) => {
       app.log.info('Ignoring secret tag push')
       return
     }
-    const stats = `No of commits: ${context.payload.pull_request.commits}\n No of additions: ${context.payload.pull_request.additions}\n No of deletions: ${context.payload.pull_request.deletions}\n No of changed files: ${context.payload.pull_request.changed_files}`
-    const message = `The pull request "${context.payload.pull_request.title}" request was synchronized on the repository ${context.payload.repository.full_name} \nStats:\n ${stats}`
+    const user = context.payload.pull_request.user.login
+    const stats = `\`\`\`diff\nStats:\n\n+  No of commits: ${context.payload.pull_request.commits}\n+  No of additions: ${context.payload.pull_request.additions}\n-  No of deletions: ${context.payload.pull_request.deletions}\n+  No of changed files: ${context.payload.pull_request.changed_files}\`\`\``
+    const message = `\`\`\`fix\n${user} synced pull request "${context.payload.pull_request.title}" on "${context.payload.repository.full_name}" \`\`\` ${stats}`
     notifyGithubChannel(message)
   }
 
